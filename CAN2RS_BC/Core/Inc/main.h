@@ -41,7 +41,12 @@ extern "C" {
 
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
+#define RX_BUF_SIZE 64
 
+extern UART_HandleTypeDef huart1;          // handle USART1
+extern DMA_HandleTypeDef  hdma_usart1_rx;  // DMA-handle для RX
+extern DMA_HandleTypeDef  hdma_usart1_tx;  // DMA-handle для TX
+extern uint8_t           rx_buf[RX_BUF_SIZE]; // буфер приёма
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/

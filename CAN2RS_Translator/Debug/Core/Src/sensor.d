@@ -23,7 +23,7 @@ Core/Src/sensor.o: ../Core/Src/sensor.c ../Core/Inc/sensor.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_flash_ex.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h \
- ../Core/Inc/can_drv.h ../Core/Inc/debug.h
+ ../Core/Inc/can_drv.h
 ../Core/Inc/sensor.h:
 ../Core/Inc/uart.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
@@ -51,4 +51,3 @@ Core/Src/sensor.o: ../Core/Src/sensor.c ../Core/Inc/sensor.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_uart.h:
 ../Core/Inc/can_drv.h:
-../Core/Inc/debug.h:

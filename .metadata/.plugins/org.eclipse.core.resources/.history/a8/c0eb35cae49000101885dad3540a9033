@@ -1,0 +1,115 @@
+#include "sensor.h"
+#include "uart.h"
+#include "can_drv.h"
+#include "debug.h"
+#include "stm32f1xx_hal.h"
+#include <string.h>
+#include <stdbool.h>
+
+#define PREAMBLE          0xAA
+#define UART_BUF_SIZE     UART_RX_BUFSIZE
+
+extern uint8_t           uart_rx_buf[UART_BUF_SIZE];
+extern DMA_HandleTypeDef  hdma_usart1_rx;
+
+static uint32_t rx_index;
+static char     ascii_buf[64];
+static size_t   ascii_len;
+static bool     in_frame;
+static uint8_t  frame_buf[256];
+static size_t   frame_len;
+static bool     awaiting_resp2;
+
+void SENSOR_Init(void)
+{
+  rx_index       = UART_BUF_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  ascii_len      = 0;
+  in_frame       = false;
+  frame_len      = 0;
+  awaiting_resp2 = false;
+}
+
+void SENSOR_Process(void)
+{
+  // вычитываем из DMA-буфера все новые байты
+  uint32_t new_idx = UART_BUF_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  while (rx_index != new_idx)
+  {
+    uint8_t b = uart_rx_buf[rx_index++];
+    if (rx_index >= UART_BUF_SIZE) rx_index = 0;
+
+    if (!in_frame)
+    {
+      // старт бинарного фрейма?
+      if (b == PREAMBLE)
+      {
+        in_frame      = true;
+        frame_len     = 1;
+        frame_buf[0]  = PREAMBLE;
+        ascii_len     = 0;  // сбросить ASCII-буфер
+      }
+      else
+      {
+        // собираем **все** байты, не только 0x20–0x7E
+        if (ascii_len + 1 < sizeof(ascii_buf))
+        {
+          ascii_buf[ascii_len++] = (char)b;
+          ascii_buf[ascii_len]  = 0;
+        }
+
+        // команда №1?
+        if (strstr(ascii_buf, "Работаешь?") != NULL)
+        {
+          UART_Send((uint8_t *)"Работаю!", strlen("Работаю!"));
+          ascii_len = 0;
+        }
+        // команда №2?
+        else if (strstr(ascii_buf, "А датчик работает?") != NULL)
+        {
+          // шлём запрос 0x04
+          uint8_t req04[] = {
+            PREAMBLE, 0x01, 0x00, 0x00,0x00, 0x04, 0x00,0x00
+          };
+          UART_Send(req04, sizeof(req04));
+          awaiting_resp2 = true;
+          ascii_len      = 0;
+        }
+      }
+    }
+    else
+    {
+      // мы внутри бинарного фрейма
+      frame_buf[frame_len++] = b;
+      if (frame_len >= 8)
+      {
+        uint16_t dlen = frame_buf[6] | (frame_buf[7] << 8);
+        if (frame_len >= 8 + dlen + 2)
+        {
+          // полный фрейм принят
+          if (awaiting_resp2)
+          {
+            UART_Send((uint8_t *)"И датчик работает", strlen("И датчик работает"));
+            awaiting_resp2 = false;
+          }
+          else
+          {
+            // пересылаем в CAN
+            CAN_Send(0x100, frame_buf, (frame_len>8?8:frame_len));
+          }
+          in_frame  = false;
+        }
+      }
+    }
+  }
+
+  // CAN→UART (без изменений)
+  if (CAN_MessagePending())
+  {
+    uint16_t id; uint8_t buf[8]; uint8_t len;
+    CAN_Receive(&id, buf, &len);
+    if (id == 0x200)
+    {
+      UART_Send(buf, len);
+    }
+  }
+}

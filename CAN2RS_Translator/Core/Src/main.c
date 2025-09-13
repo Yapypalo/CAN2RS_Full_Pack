@@ -48,7 +48,7 @@ CAN_HandleTypeDef hcan;
 
 
 /* USER CODE BEGIN PV */
-
+uint8_t rx_buf[RX_BUF_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -225,7 +225,12 @@ static void MX_USART1_UART_Init(void)
     Error_Handler();
   }
   /* USER CODE BEGIN USART1_Init 2 */
+	HAL_UART_Receive_DMA(&huart1, rx_buf, RX_BUF_SIZE);
+	__HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
 
+	// ↓↓↓ Разрешаем прерывание USART1_IRQn в NVIC ↓↓↓
+	HAL_NVIC_SetPriority(USART1_IRQn, 1, 0);
+	HAL_NVIC_EnableIRQ(USART1_IRQn);
   /* USER CODE END USART1_Init 2 */
 
 }

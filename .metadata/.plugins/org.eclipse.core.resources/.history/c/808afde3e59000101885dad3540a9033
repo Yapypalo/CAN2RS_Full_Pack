@@ -1,0 +1,137 @@
+/* ========================== sensor.c ==========================
+   UART1/RS485 → CAN-пересылка + текстовый handshake без \n
+   Обнаруживаем UTF-8 команды «Работаешь?» и «А датчик работает?» сразу по байтам.
+   ============================================================= */
+
+#include "sensor.h"
+#include "uart.h"
+#include "can_drv.h"
+#include "stm32f1xx_hal.h"
+#include <string.h>
+#include <stdbool.h>
+
+#define PREAMBLE        0xAA
+#define CAN_TX_ID       0x100
+#define CAN_RX_ID       0x200
+#define BUF_SZ          UART_RX_BUFSIZE
+
+extern uint8_t           uart_rx_buf[BUF_SZ];
+extern DMA_HandleTypeDef  hdma_usart1_rx;
+
+/* UTF-8 последовательности, по которым ищем команды */
+static const uint8_t cmd1[] =
+  "Работаешь?";               // будет закодировано в UTF-8
+static const size_t cmd1_len = sizeof(cmd1)-1;
+
+static const uint8_t cmd2[] =
+  "А датчик работает?";       // UTF-8
+static const size_t cmd2_len = sizeof(cmd2)-1;
+
+// состояние разбора UART→DMA circular
+static uint32_t rx_idx;
+static uint8_t  frame_buf[256];
+static size_t   frame_len;
+static bool     in_frame;
+
+// буфер для накопления любых байт (ASCII+UTF8)
+static uint8_t  text_buf[128];
+static size_t   text_len;
+
+// флаг «ждём ответ» на сценарий 2
+static bool     awaiting2;
+
+void SENSOR_Init(void)
+{
+  rx_idx    = BUF_SZ - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  in_frame  = false;
+  frame_len = 0;
+  text_len  = 0;
+  awaiting2 = false;
+}
+
+void SENSOR_Process(void)
+{
+  // 1) вычитываем новые байты из DMA-буфера
+  uint32_t new_idx = BUF_SZ - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  while (rx_idx != new_idx)
+  {
+    uint8_t b = uart_rx_buf[rx_idx++];
+    if (rx_idx >= BUF_SZ) rx_idx = 0;
+
+    if (!in_frame)
+    {
+      if (b == PREAMBLE)
+      {
+        // старт бинарного фрейма
+        in_frame    = true;
+        frame_len   = 1;
+        frame_buf[0]= PREAMBLE;
+      }
+      else
+      {
+        // копим _все_ байты подряд
+        if (text_len < sizeof(text_buf))
+          text_buf[text_len++] = b;
+        // ищем сразу cmd1 в конце буфера?
+        if (text_len >= cmd1_len &&
+            memcmp(text_buf + text_len - cmd1_len,
+                   cmd1, cmd1_len) == 0)
+        {
+          UART_Send((uint8_t*)"Работаю!", 8);
+          text_len = 0;
+        }
+        // ищем cmd2?
+        else if (text_len >= cmd2_len &&
+                 memcmp(text_buf + text_len - cmd2_len,
+                        cmd2, cmd2_len) == 0)
+        {
+          // шлём запрос 0x04
+          uint8_t req04[] = { PREAMBLE, 0x01,0x00, 0,0, 0x04,0,0 };
+          UART_Send(req04, sizeof(req04));
+          awaiting2 = true;
+          text_len  = 0;
+        }
+        // если переполнили text_buf — сбросим старые
+        else if (text_len == sizeof(text_buf))
+        {
+          text_len = 0;
+        }
+      }
+    }
+    else
+    {
+      // копим бинарный фрейм
+      frame_buf[frame_len++] = b;
+      if (frame_len >= 8)
+      {
+        uint16_t dlen = frame_buf[6] | (frame_buf[7]<<8);
+        if (frame_len >= 8 + dlen + 2)
+        {
+          // полный кадр готов
+          if (awaiting2)
+          {
+            UART_Send((uint8_t*)"И датчик работает", 18);
+            awaiting2 = false;
+          }
+          else
+          {
+            // форвардим первые 8 байт в CAN
+            CAN_Send(CAN_TX_ID, frame_buf, frame_len>8?8:frame_len);
+          }
+          in_frame = false;
+        }
+      }
+    }
+  }
+
+  // 2) CAN→UART (не трогаем)
+  if (CAN_MessagePending())
+  {
+    uint16_t id; uint8_t buf[8]; uint8_t len;
+    CAN_Receive(&id, buf, &len);
+    if (id == CAN_RX_ID)
+    {
+      UART_Send(buf, len);
+    }
+  }
+}

@@ -1,4 +1,4 @@
-04:34:16 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
+06:09:09 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
 make -j8 all 
 arm-none-eabi-gcc "../Core/Src/sensor.c" -mcpu=cortex-m3 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F103xB -c -I../Core/Inc -I../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy -I../Drivers/STM32F1xx_HAL_Driver/Inc -I../Drivers/CMSIS/Device/ST/STM32F1xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/sensor.d" -MT"Core/Src/sensor.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/sensor.o"
 arm-none-eabi-gcc -o "CAN2RS_Translator.elf" @"objects.list"   -mcpu=cortex-m3 -T"C:\Users\Yapupalo\Desktop\pet-проекты\STM workspace\CAN2RS_Translator\STM32F103C8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="CAN2RS_Translator.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
@@ -7,22 +7,15 @@ Finished building target: CAN2RS_Translator.elf
 arm-none-eabi-size  CAN2RS_Translator.elf 
 arm-none-eabi-objdump -h -S CAN2RS_Translator.elf  > "CAN2RS_Translator.list"
    text	   data	    bss	    dec	    hex	filename
-  14920	     92	   4356	  19368	   4ba8	CAN2RS_Translator.elf
+  17364	     92	   3724	  21180	   52bc	CAN2RS_Translator.elf
 Finished building: default.size.stdout
  
 Finished building: CAN2RS_Translator.list
  
-04:34:41 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
+06:09:25 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
 make -j8 all 
 arm-none-eabi-size  CAN2RS_Translator.elf 
    text	   data	    bss	    dec	    hex	filename
-  14920	     92	   4356	  19368	   4ba8	CAN2RS_Translator.elf
-Finished building: default.size.stdout
- 
-04:35:05 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
-make -j8 all 
-arm-none-eabi-size  CAN2RS_Translator.elf 
-   text	   data	    bss	    dec	    hex	filename
-  14920	     92	   4356	  19368	   4ba8	CAN2RS_Translator.elf
+  17364	     92	   3724	  21180	   52bc	CAN2RS_Translator.elf
 Finished building: default.size.stdout
  

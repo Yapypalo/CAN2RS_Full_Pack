@@ -1,3 +1,2 @@
-../Core/Src/sensor.c:43:13:endswith	2
-../Core/Src/sensor.c:49:6:SENSOR_Init	1
-../Core/Src/sensor.c:66:6:SENSOR_Process	18
+../Core/Src/sensor.c:37:6:SENSOR_Init	1
+../Core/Src/sensor.c:46:6:SENSOR_Process	15

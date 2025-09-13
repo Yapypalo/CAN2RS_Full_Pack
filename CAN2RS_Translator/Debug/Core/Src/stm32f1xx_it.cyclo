@@ -9,3 +9,4 @@
 ../Core/Src/stm32f1xx_it.c:184:6:SysTick_Handler	1
 ../Core/Src/stm32f1xx_it.c:205:6:DMA1_Channel4_IRQHandler	1
 ../Core/Src/stm32f1xx_it.c:219:6:DMA1_Channel5_IRQHandler	1
+../Core/Src/stm32f1xx_it.c:231:6:USART1_IRQHandler	3

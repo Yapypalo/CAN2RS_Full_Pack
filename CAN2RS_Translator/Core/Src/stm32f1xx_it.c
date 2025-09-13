@@ -31,7 +31,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -58,6 +57,7 @@
 extern DMA_HandleTypeDef hdma_usart1_rx;
 extern DMA_HandleTypeDef hdma_usart1_tx;
 /* USER CODE BEGIN EV */
+extern UART_HandleTypeDef huart1;
 
 /* USER CODE END EV */
 
@@ -228,5 +228,26 @@ void DMA1_Channel5_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+void USART1_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART1_IRQn 0 */
+  // ловим IDLE
+  if (__HAL_UART_GET_FLAG(&huart1, UART_FLAG_IDLE))
+  {
+    __HAL_UART_CLEAR_IDLEFLAG(&huart1);
+    HAL_UART_DMAStop(&huart1);
+    uint16_t len = RX_BUF_SIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+    if (len)
+    {
+      HAL_UART_Transmit_DMA(&huart1, rx_buf, len);
+    }
+    HAL_UART_Receive_DMA(&huart1, rx_buf, RX_BUF_SIZE);
+  }
+  /* USER CODE END USART1_IRQn 0 */
 
+  HAL_UART_IRQHandler(&huart1);
+
+  /* USER CODE BEGIN USART1_IRQn 1 */
+  /* USER CODE END USART1_IRQn 1 */
+};
 /* USER CODE END 1 */
