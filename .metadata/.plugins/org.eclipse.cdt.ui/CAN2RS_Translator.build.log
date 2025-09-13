@@ -1,10 +1,10 @@
-02:17:16 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
+04:35:05 **** Incremental Build of configuration Debug for project CAN2RS_Translator ****
 make -j8 all 
 arm-none-eabi-size  CAN2RS_Translator.elf 
    text	   data	    bss	    dec	    hex	filename
-   7040	     12	   1684	   8736	   2220	CAN2RS_Translator.elf
+  14920	     92	   4356	  19368	   4ba8	CAN2RS_Translator.elf
 Finished building: default.size.stdout
  
 
-02:17:17 Build Finished. 0 errors, 0 warnings. (took 305ms)
+04:35:05 Build Finished. 0 errors, 0 warnings. (took 360ms)
 

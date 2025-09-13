@@ -1,0 +1,146 @@
+/* ========================== sensor.c ==========================
+   Транслятор между CAN и UART1/RS-485 со сценариями handshake:
+     • «Работаешь?» → «Работаю!»
+     • «А датчик работает?» → запрос 0x04 → «И датчик работает»
+   Бинарные пакеты (PREAMBLE) по умолчанию пересылаются в CAN-шину.
+   ============================================================= */
+
+#include "sensor.h"
+#include "uart.h"         // для UART_RX_BUFSIZE, uart_rx_buf, hdma_usart1_rx, UART_Send()
+#include "can_drv.h"
+#include "debug.h"
+#include "stm32f1xx_hal.h"
+#include <string.h>
+#include <stdbool.h>
+
+#define PREAMBLE           0xAA
+#define SENSOR_CAN_TX_ID   0x100
+#define SENSOR_CAN_RX_ID   0x200
+#define SENSOR_TIMEOUT_MS  500  // мс
+
+// DMA circular RX-буфер из uart.c
+extern uint8_t            uart_rx_buf[UART_RX_BUFSIZE];
+extern DMA_HandleTypeDef  hdma_usart1_rx;
+
+// Индекс «прочитано до» в uart_rx_buf
+static uint32_t uart_last_idx;
+// Таймер ожидания ответа от зонда
+static uint32_t last_req_tick;
+// Флаги сценариев
+static bool awaiting_sensor;
+static bool awaiting_handshake2;
+
+// Внутренние буферы для парсинга
+static char     ac_buf[64];
+static int      ac_len;
+static uint8_t  bin_buf[1024];
+static int      bin_len;
+static bool     in_bin;
+
+/**
+ * @brief Ищет подстроку pat в текущем ASCII-буфере ac_buf.
+ */
+static bool ascii_find(const char *pat, int pat_len)
+{
+  if (ac_len < pat_len) return false;
+  for (int i = 0; i + pat_len <= ac_len; ++i)
+    if (memcmp(&ac_buf[i], pat, pat_len) == 0)
+      return true;
+  return false;
+}
+
+void SENSOR_Init(void)
+{
+  // аппаратный reset звёздного датчика (PB7)
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+
+  // инициализируем индексы и флаги
+  uart_last_idx       = UART_RX_BUFSIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  last_req_tick       = HAL_GetTick();
+  awaiting_sensor     = false;
+  awaiting_handshake2 = false;
+  ac_len              = 0;
+  bin_len             = 0;
+  in_bin              = false;
+}
+
+void SENSOR_Process(void)
+{
+  // 1) Сканируем новые байты из DMA-буфера uart_rx_buf
+  uint32_t cur_idx = UART_RX_BUFSIZE - __HAL_DMA_GET_COUNTER(&hdma_usart1_rx);
+  while (uart_last_idx != cur_idx) {
+    uint8_t b = uart_rx_buf[uart_last_idx++];
+    if (uart_last_idx >= UART_RX_BUFSIZE) uart_last_idx = 0;
+
+    if (!in_bin) {
+      // Накопление ASCII-символов
+      if (b >= 32 && b <= 126 && ac_len < (int)sizeof(ac_buf)-1) {
+        ac_buf[ac_len++] = (char)b;
+      }
+      // Конец строки или полный буфер
+      if (b == '\n' || ac_len == (int)sizeof(ac_buf)-1) {
+        // Сценарий 1
+        if (ascii_find("Работаешь?", 10)) {
+          UART_Send((uint8_t*)"Работаю!", 8);
+        }
+        // Сценарий 2
+        else if (ascii_find("А датчик работает?", 19)) {
+          uint8_t req04[] = { PREAMBLE, 0x01,0x00, 0,0, 0x04,0,0 };
+          UART_Send(req04, sizeof(req04));
+          awaiting_sensor     = true;
+          awaiting_handshake2 = true;
+          last_req_tick       = HAL_GetTick();
+        }
+        ac_len = 0;
+      }
+      // Если встретили PREAMBLE — переходим в режим разбора бинарного фрейма
+      if (b == PREAMBLE) {
+        in_bin    = true;
+        bin_buf[0] = b;
+        bin_len   = 1;
+      }
+    }
+    else {
+      // Копим бинарный фрейм: заголовок (8 байт), данные, CRC(2 байта)
+      bin_buf[bin_len++] = b;
+      if (bin_len == 8) {
+        uint16_t dlen = bin_buf[6] | (bin_buf[7] << 8);
+        (void)dlen;  // используем ниже
+      }
+      // По достижении полной длины (8+dlen+2) — обрабатываем
+      if (bin_len >= 8 + (bin_buf[6] | (bin_buf[7]<<8)) + 2) {
+        if (awaiting_sensor && awaiting_handshake2) {
+          UART_Send((uint8_t*)"И датчик работает", 18);
+          awaiting_sensor     = false;
+          awaiting_handshake2 = false;
+        }
+        else {
+          // Пересылаем первые 8 байт фрейма в CAN
+          CAN_Send(SENSOR_CAN_TX_ID, bin_buf, bin_len>8?8:bin_len);
+        }
+        // Сброс режима разбора бинарника
+        in_bin   = false;
+        bin_len  = 0;
+      }
+    }
+  }
+
+  // 2) Перенаправление CAN→UART
+  if (CAN_MessagePending()) {
+    uint16_t id; uint8_t buf[8]; uint8_t len;
+    CAN_Receive(&id, buf, &len);
+    if (id == SENSOR_CAN_RX_ID) {
+      UART_Send(buf, len);
+      awaiting_sensor = true;
+      last_req_tick   = HAL_GetTick();
+    }
+  }
+
+  // 3) Таймаут ответа от зонда
+  if (awaiting_sensor && (HAL_GetTick() - last_req_tick > SENSOR_TIMEOUT_MS)) {
+    DEBUG_Log("Sensor timeout, resetting...\r\n");
+    SENSOR_Init();
+  }
+}

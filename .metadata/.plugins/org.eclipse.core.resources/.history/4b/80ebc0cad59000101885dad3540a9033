@@ -1,0 +1,106 @@
+#include "sensor.h"
+#include "uart.h"
+#include "can_drv.h"
+#include "debug.h"
+#include <string.h>        // для memcmp, strlen
+#include "stm32f1xx_hal.h"
+
+#define PREAMBLE       0xAA
+#define SENSOR_CAN_TX_ID   0x100
+#define SENSOR_CAN_RX_ID   0x200
+#define SENSOR_TIMEOUT_MS  500
+
+static uint32_t last_req_tick = 0;
+static bool awaiting_sensor = false;
+static bool awaiting_handshake2 = false;
+
+void SENSOR_Init(void)
+{
+  // сброс зонда
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_RESET);
+  HAL_Delay(10);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
+  awaiting_sensor     = false;
+  awaiting_handshake2 = false;
+  last_req_tick       = HAL_GetTick();
+}
+
+void SENSOR_Process(void)
+{
+  // 1) Проверяем, пришёл ли ASCII-пакет (handshake) или двоичный фрейм (с PREAMBLE)
+  if ( UART_PacketReady() ) {
+    uint16_t plen;
+    uint8_t *buf = UART_GetRxBuf(&plen);
+
+    // --- 1.1. ASCII-handshake (нет PREAMBLE) ---
+    if ( plen > 0 && buf[0] != PREAMBLE ) {
+      // команда №1
+      if ( plen == strlen("Работаешь?") &&
+           memcmp(buf, "Работаешь?", plen) == 0 )
+      {
+        UART_Send((uint8_t*)"Работаю!", strlen("Работаю!"));
+      }
+      // команда №2: «А датчик работает?»
+      else if ( plen == strlen("А датчик работает?") &&
+                memcmp(buf, "А датчик работает?", plen) == 0 )
+      {
+        // пошлём реальный запрос 0x04 к сенсору
+        uint8_t req04[] = {
+          PREAMBLE,
+          0x01,    // dest = адрес зонда
+          0x00,    // src  = наш STM
+          0x00,0x00,
+          0x04,    // команда 0x04 – сделать фото и рассчитать
+          0x00,0x00  // длина данных = 0
+        };
+        UART_Send(req04, sizeof(req04));
+        awaiting_sensor    = true;
+        awaiting_handshake2 = true;
+        last_req_tick      = HAL_GetTick();
+      }
+      // всё прочее — игнорируем или логгируем
+    }
+    // --- 1.2. Двоичный фрейм: от сенсора (PREAMBLE) ---
+    else if ( plen > 0 && buf[0] == PREAMBLE )
+    {
+      // Если мы в сценарии №2 ждём ответ от сенсора — ловим его
+      if ( awaiting_sensor && awaiting_handshake2 )
+      {
+        // получили фото+углы
+        UART_Send((uint8_t*)"И датчик работает", strlen("И датчик работает"));
+        awaiting_sensor     = false;
+        awaiting_handshake2 = false;
+      }
+      // И в любом случае пересылаем фрейм дальше в CAN
+      else
+      {
+        // отдаем в CAN-шину
+        CAN_Send(SENSOR_CAN_TX_ID, buf, plen);
+      }
+    }
+  }
+
+  // 2) Взятых на прием CAN-сообщений – шлём зонд
+  if ( CAN_MessagePending() )
+  {
+    uint16_t can_id;
+    uint8_t can_buf[8];
+    uint8_t can_len;
+    CAN_Receive(&can_id, can_buf, &can_len);
+
+    if ( can_id == SENSOR_CAN_RX_ID )
+    {
+      UART_Send(can_buf, can_len);
+      awaiting_sensor    = true;
+      last_req_tick      = HAL_GetTick();
+    }
+  }
+
+  // 3) Тайм-аут ожидания от сенсора — перезапустить зонд
+  if ( awaiting_sensor &&
+       (HAL_GetTick() - last_req_tick > SENSOR_TIMEOUT_MS) )
+  {
+    DEBUG_Log("Sensor timeout, resetting...\r\n");
+    SENSOR_Init();
+  }
+}

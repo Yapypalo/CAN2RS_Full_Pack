@@ -1,0 +1,95 @@
+/* ========================== uart.c ========================== */
+/*
+  UART1 @1 000 000 baud, RX via DMA circular buffer,
+  TX via DMA with RS-485 DE control on PB6.
+*/
+
+#include "uart.h"
+#include "stm32f1xx_hal.h"
+
+// Размер кольцевого буфера для приёма UART1
+#define UART_RX_BUFSIZE 1024
+
+// Буфер приёма DMA (circular)
+uint8_t uart_rx_buf[UART_RX_BUFSIZE];
+
+// Описатели UART1 и его DMA каналов
+UART_HandleTypeDef huart1;
+DMA_HandleTypeDef  hdma_usart1_rx;
+DMA_HandleTypeDef  hdma_usart1_tx;
+
+/**
+ * @brief Инициализация UART1 и его DMA для RS-485.
+ *
+ * - Скорость: 1 000 000 baud
+ * - Приём по DMA (circular) в uart_rx_buf
+ * - Передача по DMA, управление DE (PB6) в HAL_UART_TxCpltCallback
+ */
+void UART_Init(void)
+{
+  // Включаем тактирование UART1 и DMA1
+  __HAL_RCC_USART1_CLK_ENABLE();
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  // Конфигурация UART1
+  huart1.Instance          = USART1;
+  huart1.Init.BaudRate     = 1000000;
+  huart1.Init.WordLength   = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits     = UART_STOPBITS_1;
+  huart1.Init.Parity       = UART_PARITY_NONE;
+  huart1.Init.Mode         = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl    = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  HAL_UART_Init(&huart1);
+
+  // Настройка DMA для приёма (circular)
+  hdma_usart1_rx.Instance                 = DMA1_Channel5;
+  hdma_usart1_rx.Init.Direction           = DMA_PERIPH_TO_MEMORY;
+  hdma_usart1_rx.Init.PeriphInc           = DMA_PINC_DISABLE;
+  hdma_usart1_rx.Init.MemInc              = DMA_MINC_ENABLE;
+  hdma_usart1_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  hdma_usart1_rx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  hdma_usart1_rx.Init.Mode                = DMA_CIRCULAR;
+  hdma_usart1_rx.Init.Priority            = DMA_PRIORITY_HIGH;
+  HAL_DMA_Init(&hdma_usart1_rx);
+  __HAL_LINKDMA(&huart1, hdmarx, hdma_usart1_rx);
+
+  // Настройка DMA для передачи (normal)
+  hdma_usart1_tx.Instance                 = DMA1_Channel4;
+  hdma_usart1_tx.Init.Direction           = DMA_MEMORY_TO_PERIPH;
+  hdma_usart1_tx.Init.PeriphInc           = DMA_PINC_DISABLE;
+  hdma_usart1_tx.Init.MemInc              = DMA_MINC_ENABLE;
+  hdma_usart1_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
+  hdma_usart1_tx.Init.MemDataAlignment    = DMA_MDATAALIGN_BYTE;
+  hdma_usart1_tx.Init.Mode                = DMA_NORMAL;
+  hdma_usart1_tx.Init.Priority            = DMA_PRIORITY_MEDIUM;
+  HAL_DMA_Init(&hdma_usart1_tx);
+  __HAL_LINKDMA(&huart1, hdmatx, hdma_usart1_tx);
+
+  // Запуск приёма по DMA в режиме circular
+  HAL_UART_Receive_DMA(&huart1, uart_rx_buf, UART_RX_BUFSIZE);
+}
+
+/**
+ * @brief Передача данных по UART1/RS-485.
+ * @param buf  Указатель на буфер с данными.
+ * @param len  Длина данных в байтах.
+ */
+void UART_Send(uint8_t *buf, uint16_t len)
+{
+  // Включаем драйвер RS-485 (DE = 1)
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_SET);
+
+  // Передаём по DMA
+  HAL_UART_Transmit_DMA(&huart1, buf, len);
+}
+
+/**
+ * @brief Колбэк HAL по окончании UART-трансфера.
+ *        Здесь сбрасываем DE (PB6 = 0).
+ */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART1) {
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
+  }

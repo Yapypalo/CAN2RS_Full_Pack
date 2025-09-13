@@ -1,0 +1,23 @@
+/* ========================== debug.h ========================== */
+#ifndef DEBUG_H
+#define DEBUG_H
+
+#include <stdbool.h>
+
+/**
+ * @brief Инициализация отладочных каналов (UART2, SWD, LED).
+ */
+void DEBUG_Init(void);
+
+/**
+ * @brief Периодическая самодиагностика памяти, периферии.
+ *        При критической ошибке – SystemReset().
+ */
+void DEBUG_SelfTest(void);
+
+/**
+ * @brief Печать диагностического текста.
+ */
+void DEBUG_Log(const char *fmt, ...);
+
+#endif // DEBUG_H

@@ -1,0 +1,3 @@
+../Drivers/CMSIS/Include/core_cm3.h:1762:34:__NVIC_SystemReset	4	static,ignoring_inline_asm
+../Core/Src/debug.c:7:6:DEBUG_Log	144	static
+../Core/Src/debug.c:23:6:DEBUG_SelfTest	16	static

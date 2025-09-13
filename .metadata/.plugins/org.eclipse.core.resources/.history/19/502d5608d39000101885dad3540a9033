@@ -1,0 +1,54 @@
+/* ========================== debug.c ========================== */
+#include "debug.h"
+#include "stm32f1xx_hal.h"
+#include <stdarg.h>
+#include <stdio.h>
+
+static UART_HandleTypeDef huart2;
+
+void DEBUG_Init(void)
+{
+  // Настроим UART2 @115200 для отладки
+  __HAL_RCC_USART2_CLK_ENABLE();
+  huart2.Instance          = USART2;
+  huart2.Init.BaudRate     = 115200;
+  huart2.Init.WordLength   = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits     = UART_STOPBITS_1;
+  huart2.Init.Parity       = UART_PARITY_NONE;
+  huart2.Init.Mode         = UART_MODE_TX_RX;
+  HAL_UART_Init(&huart2);
+}
+
+void DEBUG_Log(const char *fmt, ...)
+{
+  char buf[128];
+  va_list ap;
+  va_start(ap, fmt);
+  int len = vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  if (len > 0) {
+    HAL_UART_Transmit(&huart2, (uint8_t*)buf, len, 100);
+  }
+}
+
+void DEBUG_SelfTest(void)
+{
+  static uint32_t last = 0;
+  if (HAL_GetTick() - last < 1000) return;
+  last = HAL_GetTick();
+
+  // Проверяем состояние UART1 DMA
+  if (huart2.gState == HAL_UART_STATE_ERROR) {
+    DEBUG_Log("UART2 error -> reset MCU\r\n");
+    HAL_Delay(10);
+    NVIC_SystemReset();
+  }
+  // Проверим CAN
+  // (можно читать статус шины, ошибки)
+  if (__HAL_CAN_GET_FLAG(&hcan1, CAN_FLAG_EWG) ||
+      __HAL_CAN_GET_FLAG(&hcan1, CAN_FLAG_EPV) ||
+      __HAL_CAN_GET_FLAG(&hcan1, CAN_FLAG_BOF)) {
+    DEBUG_Log("CAN bus error -> reset MCU\r\n");
+    NVIC_SystemReset();
+  }
+}

@@ -21,6 +21,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stm32f1xx_hal.h"
+#include "uart.h"
+#include "can_drv.h"
+#include "sensor.h"
+#include "debug.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -94,16 +99,18 @@ int main(void)
   MX_CAN_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-  uint8_t uart_msg[] = "Hello from UART via NUCLEO USB\r\n";
+  UART_Init();         // UART1 @1 000 000 baud, DMA RX/TX, RS-485 DE control
+  CAN_Init();          // CAN1 500 kHz (зависит от дисплея шины)
+  SENSOR_Init();       // Инициализация «звездного датчика» (RS-485 интерфейс)
+  DEBUG_Init();        // Инициализация отладочных модулей
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  HAL_UART_Transmit(&huart1, uart_msg, sizeof(uart_msg) - 1, 100);
-	  HAL_Delay(1000);
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+	    SENSOR_Process();    // трансляция CAN↔RS485, контроль зонда
+	    DEBUG_SelfTest();    // мониторинг ошибок, перезапуск при критике
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
