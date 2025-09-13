@@ -1,0 +1,17 @@
+23:31:44 **** Incremental Build of configuration Debug for project Testing can2rs ****
+make -j8 all 
+arm-none-eabi-gcc "../Core/Src/app.c" -mcpu=cortex-m0 -std=gnu11 -g3 -DDEBUG -DUSE_HAL_DRIVER -DSTM32F030x8 -c -I../Core/Inc -I../Drivers/STM32F0xx_HAL_Driver/Inc -I../Drivers/STM32F0xx_HAL_Driver/Inc/Legacy -I../Drivers/CMSIS/Device/ST/STM32F0xx/Include -I../Drivers/CMSIS/Include -O0 -ffunction-sections -fdata-sections -Wall -fstack-usage -fcyclomatic-complexity -MMD -MP -MF"Core/Src/app.d" -MT"Core/Src/app.o" --specs=nano.specs -mfloat-abi=soft -mthumb -o "Core/Src/app.o"
+arm-none-eabi-gcc -o "Testing can2rs.elf" @"objects.list"   -mcpu=cortex-m0 -T"C:\Users\Yapupalo\Desktop\pet-проекты\STM workspace\Testing can2rs\STM\STM32F030R8TX_FLASH.ld" --specs=nosys.specs -Wl,-Map="Testing can2rs.map" -Wl,--gc-sections -static --specs=nano.specs -mfloat-abi=soft -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: Testing can2rs.elf
+ 
+arm-none-eabi-size  Testing\ can2rs.elf 
+arm-none-eabi-objdump -h -S Testing\ can2rs.elf  > "Testing can2rs.list"
+   text	   data	    bss	    dec	    hex	filename
+  17332	    104	   2248	  19684	   4ce4	Testing can2rs.elf
+Finished building: default.size.stdout
+ 
+Finished building: Testing can2rs.list
+ 
+
+23:31:46 Build Finished. 0 errors, 0 warnings. (took 1s.119ms)
+
